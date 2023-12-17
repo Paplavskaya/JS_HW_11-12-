@@ -35,47 +35,85 @@ class Contacts {                                            //п2.1   созда
         //     })
         // ];
         // this.contactsData = JSON.parse(localStorage.getItem('contactsItem')) || [];
-        this.contactsData = this.createUserFromLocalStorage() ?? [];
-        console.log(this.contactsData);
-        this.deleteLocalStorage()
+        this.contactsData = []                                  //п2.3   создаем пустой массив контактов
     }
-
-    createCookie(){
-        let days = 10;
-        let seconds = days*24*60*60;
-        document.cookie = `storageExpiration=${JSON.stringify(this.contactsData)}; max-age=${seconds}`        
-    }
-
-    deleteLocalStorage(){
-        if(document.cookie.length === 0) {
-            localStorage.clear()
-        } 
-    }
-
-    createUserFromLocalStorage() {
-       const localStorageData = JSON.parse(localStorage.getItem('contactsItem'));
-       if(!localStorageData) {
+    
+    createUserFromLocalStorage() {                              //п4.5  созадем метод пересоздания объектов, так как JSON обрезал все методы в прототипе
+       const localStorageData = JSON.parse(localStorage.getItem('contactsItem'));   //п4.6  записываем в переменную(массив), получанные данные из localStorage
+       if(!localStorageData) {                                  //п4.7  делаем проверку: если localStorage нет, возвращаем undefined, т.е дальше ничего не стоит делать          
             return undefined;
        }
 
-       const userFromLocalStorage = localStorageData.map((item) => {
-            return new User(item.data)
+       const userFromLocalStorage = localStorageData.map((item) => {    //п4.8  мапим полученный массив из localStorage, что бы получить новый массив с измененными итемами
+            return new User(item.data)                                  //п4.9  возвращаем новых юзеров, звкидываем в них data
        }) 
           
-       return userFromLocalStorage;
+       return userFromLocalStorage;                             //п4.10  возвращаем новые данные (мапер) 
     }
 
-    setLocalStoStorage() {
-        this.createCookie()
-        localStorage.setItem('contactsItem', JSON.stringify(this.contactsData));    //п4.   сохраняем данные в localStorage, первыйм пораметром передаем ключ, вторым значение
-                                                                                    //  так как в значении дожна быть строка, а у нас массив, переводим массив в строку с помощью JSON.stringify
+    async getData() {
+        try{
+            const response = await fetch('https://jsonplaceholder.typicode.com/users');
+            if(response.status >= 400 && response.status <= 420 || response.status >= 500 && response.status <= 520){
+                throw new Error('error')
+            }
+
+            const serverData = await response.json();
+            const data = this.serverDataMapper(serverData);
+            return data;
+            
+        } catch (error) {
+            console.error(error);
+        }
     }
+
+    serverDataMapper(data) {
+        return data.map(({id, address: {city, street}, name, phone, email}) => 
+                        new User({
+                            id: `${id}`,
+                            address: `${city} ${street}`,
+                            name,
+                            phone,
+                            email
+                        }))
+    }
+
+    async getValidateContactsData () {                          //п4.16  метод проверки наличия Cookie и удаления localStorage 
+        const isContactsCookie = !!this.getCookie('contactCookie'); //п4.17 ищем Cookie(должны получить строку или undefined), но нам нужно
+                                                                    // true или false. Чтобы привести к булиан перед метотодом ставим !!(двойную инверсию)
+        
+        if(isContactsCookie){                                   //п4.18  если isContactsCookie - true
+            return this.createUserFromLocalStorage() ?? [];     //п4.19 проверяем есть ли у нас что-то в LocalStorage,
+                                                                // если занчение равно undefined, либо null используем ??, что бы подставить пустой массив
+        }
+
+        localStorage.removeItem('contactsItem');                //п4.20  если isContactsCookie нет, удаляем localStorage
+        return await this.getData(); 
+    }
+
+    setLocalStorage() {
+        localStorage.setItem('contactsItem', JSON.stringify(this.contactsData));    //п4.1   сохраняем данные в localStorage, первыйм параметром передаем ключ, вторым значение
+                                                                                    //  так как в значении дожна быть строка, а у нас массив, переводим массив в строку с помощью JSON.stringify
+        this.setCookie();                                      //п4.14  при каждом обновлении localStorage вызываем метод
+    }
+
+    setCookie(){                                              //п4.11  записываем метод создания Cookie
+        const seconds = 25;                                   //п4.12  создаем переменную с кол-влм секунд, необходимых для хранения Cookie
+        document.cookie = `contactCookie = contacts; max-age=${seconds}`   //п4.13  создаем Cookie, присваиваем первому ключу - название, вторым - время экпирации         
+    }
+
+    getCookie(name) {                                         //п4.15  метод получения Cookie по названию
+        let matches = document.cookie.match(new RegExp(
+          "(?:^|; )" + name.replace(/([\.$?*|{}\(\)\[\]\\\/\+^])/g, '\\$1') + "=([^;]*)"
+        ));
+        return matches ? decodeURIComponent(matches[1]) : undefined;
+    }    
 
     add(userData) {                                         //п2.6   создаем метод добавления нового контакта в массив, передавая некий объект
         this.contactsData.push(new User(userData));         //п2.7   пушим в массив контакта, созданного на основе класса User
         console.log(this.contactsData)
         
-        this.setLocalStoStorage();
+        this.setLocalStorage();                          //п4.2   вызываем метод создания LocalStorage
     }
 
     editContactUser(id, updatedUserData) {                  //п2.8   создаем метод для редактирования информации конкретного контакта, в метод передаем id и обновленные параметры
@@ -86,14 +124,14 @@ class Contacts {                                            //п2.1   созда
             return user ;                                   //п2.12  возвращаем контакт с обновленными параметрами       
         })
        
-        this.setLocalStoStorage();
+        this.setLocalStorage();                             //п4.3   вызываем метод создания LocalStorage
     }
 
     removeContactUser(id) {                                 //п2.13  создаем метод удаления определенного контакта из массива, в метод передаем id
         this.contactsData = this.contactsData.filter((user) => user.data.id !== id);    //п2.14  используем метод filter, для создания нового массива с объектами, в которых условие (id контакта не равно переданному в метод id) является true...остальные объекты не попадут в массив
         // this.contactsData = this.contactsData.filter(({data: {id: userId}}) => userId !== id); //декструктуризация
        
-        this.setLocalStoStorage();
+        this.setLocalStorage();                             //п4.4   вызываем метод создания LocalStorage
     }
 
     get() {                                                 //п2.15  создаем метод для получения всех контактов
@@ -104,12 +142,26 @@ class Contacts {                                            //п2.1   созда
 class ContactsApp extends Contacts{                         //п3.1   создаем класс для интерфейса и показа его в браузере, наследуем его от класса Contacts
     constructor() {                                         //п3.2   создаем конструктор
         super();                                            //п3.3   вызываем super, что бы одновременно с конструктором класса запускался конструктор родителя
-        this.app = this.createRootElement();                //п3.9   создаем элемент на основе метода createRootElement
+       this.app = this.createRootElement();                //п3.9   создаем элемент на основе метода createRootElement
 
         document.body.appendChild(this.app);                //п3.10  добавляем корневой с
         this.addContactEvent();                             //п3.16  запускаем обработчика для кнопки Добавить контакт
-        this.get()                                          //п3.46  запускаем метод, что бы отрисовать то, что уже имеется 
+        this.startApp()                                     //п запускаем метод
         this.self = this; 
+    }
+
+    startApp() {
+        const preloader = document.createElement('div');
+        preloader.classList.add('preloader');
+        preloader.innerHTML = `<h2 class="preloader__text">Data is loading...</h2>`
+        document.body.appendChild(preloader);
+
+        this.getValidateContactsData().then((data) => {
+            preloader.remove();
+            this.contactsData = data;
+            this.setLocalStorage();
+            this.get();
+        })
     }
 
     createRootElement() {                                   //п3.4   создаем метод формирования корневого элемента контактной книги
@@ -156,9 +208,9 @@ class ContactsApp extends Contacts{                         //п3.1   созда
             phone: phone.value,                             //п3.26  принимаем значение phone из сво-ва инпута value
         }
 
-        if(name.value.length === 0 || email.value.length === 0 ||
-            address.value.length === 0 || phone.value.length === 0
-        ) {return
+        if(name.value.length === 0 || email.value.length === 0 ||   //  делаем проверку
+        address.value.length === 0 || phone.value.length === 0) {
+            return
         }  else {
             this.add(userData);                                 //п3.27  вызываем метод add из родительского конструктора и передаем ему созданного пользователя                           
         }
@@ -244,7 +296,6 @@ class ContactsApp extends Contacts{                         //п3.1   созда
             })
         })
     }
-
 }
 
 class Modal {                                                 //п3.61  создаем класс для модального окна  
